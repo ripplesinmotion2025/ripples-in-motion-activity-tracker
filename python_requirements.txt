@@ -1,0 +1,19 @@
+# ---- Core App ----
+streamlit==1.38.0
+pandas==2.2.3
+numpy==1.26.4
+
+# ---- Firebase Integration ----
+firebase-admin==6.5.0
+pycryptodomex==3.21.0   # safer alternative to pycryptodome (no C++ build needed)
+
+# ---- Data Visualization ----
+matplotlib==3.9.2
+plotly==5.24.1
+
+# ---- Utility ----
+python-dateutil==2.9.0
+requests==2.32.3
+
+# ---- Optional (only if you plan to deploy on Streamlit Cloud) ----
+watchdog==4.0.1

@@ -16,16 +16,16 @@ firebaseConfig = {
 #pb_auth = firebase.auth()
 
 import os, json
-from firebase_admin import credentials, firestore, initialize_app
+from firebase_admin import credentials, firestore, initialize_app, storage
 
 # Read Firebase credentials from environment variable
 firebase_key_json = os.getenv("FIREBASE_KEY")
 firebase_key = json.loads(firebase_key_json)
 
 cred = credentials.Certificate(firebase_key)
-initialize_app(cred)
+initialize_app(cred, {
+    "storageBucket": "ripples-in-motion-activi-8f311.appspot.com"
+})
 
 db = firestore.client()
-
-
-db = firestore.client()
+bucket = storage.bucket()

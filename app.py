@@ -1,75 +1,99 @@
 import streamlit as st
-import pandas as pd
-from firebase_config import db
-from datetime import date
+from datetime import datetime
+from firebase_config import db, bucket
 
-st.set_page_config(page_title="Ripples in Motion Activity Tracker", layout="wide")
+st.set_page_config(page_title="Ripples in Motion Tracker", layout="wide")
 
-st.title("🏃‍♂️ Ripples in Motion - Activity Tracker")
+# --- SESSION STATE ---
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-# --- Input Form ---
-st.header("Add Your Daily Activity")
+# --- NEW USER REGISTRATION ---
+def register_user():
+    st.header("Welcome to Ripples in Motion 🏃‍♂️")
+    name = st.text_input("Name")
+    dob = st.date_input("Date of Birth")
+    phone = st.text_input("WhatsApp Number")
+    photo = st.file_uploader("Upload Profile Picture (optional)", type=["jpg", "jpeg", "png"])
+    if st.button("Register"):
+        user_ref = db.collection("users").document(phone)
+        data = {"name": name, "dob": str(dob), "phone": phone}
+        if photo:
+            blob = bucket.blob(f"profile_pics/{phone}.jpg")
+            blob.upload_from_file(photo)
+            data["photo_url"] = blob.public_url
+        user_ref.set(data)
+        st.session_state.user = phone
+        st.success(f"Welcome, {name}!")
+        st.experimental_rerun()
 
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    member_name = st.text_input("👤 Member Name")
-with col2:
-    activity = st.selectbox(
-        "🏋️ Activity",
-        ["Walking", "Running", "Cycling", "Yoga", "Gym", "Badminton", "Dance", "Trekking", "Volley Ball"]
-    )
-with col3:
-    distance = st.number_input("📏 Distance (km)", min_value=0.0, step=0.1)
-with col4:
-    duration = st.number_input("⏱ Duration (minutes)", min_value=0.0, step=1.0)
-with col5:
-    activity_date = st.date_input("📅 Date", date.today())
+# --- ACTIVITY LOGGING ---
+def log_activity(phone):
+    st.subheader("📝 Log Your Activity")
+    activity = st.selectbox("Activity Type", ["Walking", "Jogging", "Running", "Cycling", "Yoga", "Gym", "Dance", "Trekking", "Badminton"])
+    duration = st.number_input("Duration (minutes)", min_value=1)
+    date = st.date_input("Date", datetime.now().date())
 
-if st.button("Submit Activity"):
-    if member_name:
-        doc_ref = db.collection("activities").document()
-        doc_ref.set({
-            "member_name": member_name,
+    met_values = {
+        "Walking": 3.5, "Jogging": 7, "Running": 9.8, "Cycling": 7.5,
+        "Yoga": 3, "Gym": 6, "Dance": 5, "Trekking": 6.5, "Badminton": 5.5
+    }
+    calories = round(met_values[activity] * 70 * (duration / 60), 1)
+    if st.button("Save Activity"):
+        db.collection("activities").document(phone).collection("logs").add({
             "activity": activity,
-            "distance": distance,
             "duration": duration,
-            "date": activity_date.isoformat()
+            "calories": calories,
+            "date": str(date),
+            "timestamp": datetime.now()
         })
-        st.success("✅ Activity added successfully!")
+        st.success(f"Activity logged: {activity} ({calories} kcal)")
+
+# --- LEADERBOARD ---
+def show_leaderboard():
+    st.subheader("🏆 Monthly Leaderboard")
+    current_month = datetime.now().strftime("%Y-%m")
+    all_users = db.collection("users").stream()
+
+    leaderboard = []
+    for user in all_users:
+        phone = user.id
+        logs = db.collection("activities").document(phone).collection("logs").where("date", ">=", f"{current_month}-01").stream()
+        total_calories = sum([l.to_dict()["calories"] for l in logs])
+        leaderboard.append({
+            "name": user.to_dict()["name"],
+            "phone": phone,
+            "calories": total_calories,
+            "photo_url": user.to_dict().get("photo_url")
+        })
+
+    leaderboard = sorted(leaderboard, key=lambda x: x["calories"], reverse=True)
+    top3 = leaderboard[:3]
+
+    # --- Display top 3 performers ---
+    cols = st.columns(3)
+    for i, performer in enumerate(top3):
+        with cols[i]:
+            if performer["photo_url"]:
+                st.image(performer["photo_url"], width=100)
+            st.markdown(f"**#{i+1} {performer['name']}**")
+            st.caption(f"{performer['calories']} kcal")
+
+    # --- Show full leaderboard ---
+    st.table([{ "Rank": i+1, "Name": x["name"], "Calories": x["calories"] } for i, x in enumerate(leaderboard)])
+
+# --- USER DASHBOARD ---
+if st.session_state.user:
+    user_phone = st.session_state.user
+    st.sidebar.success(f"Logged in as {user_phone}")
+    choice = st.sidebar.radio("Navigation", ["Log Activity", "Leaderboard", "My Records"])
+    if choice == "Log Activity":
+        log_activity(user_phone)
+    elif choice == "Leaderboard":
+        show_leaderboard()
     else:
-        st.warning("Please enter a member name!")
-
-# --- Fetch and Display Data ---
-st.header("📊 Activity Dashboard")
-
-docs = db.collection("activities").stream()
-data = [doc.to_dict() for doc in docs]
-
-if len(data) > 0:
-    df = pd.DataFrame(data)
-    df["date"] = pd.to_datetime(df["date"])
-
-    # Calculate Points (same as your Google Sheet logic)
-    def calculate_points(row):
-        act, dist, dur = row["activity"], row["distance"], row["duration"]
-        if act == "Walking": return (dist * 8) + ((dist / dur) * 10) if dur else dist * 8
-        if act == "Running": return (dist * 18) + ((dist / dur) * 25) if dur else dist * 18
-        if act == "Cycling": return (dist * 10) + ((dist / dur) * 15) if dur else dist * 10
-        if act == "Yoga": return dur * 0.5
-        if act == "Gym": return dur * 1.75
-        if act == "Badminton": return dur * 1.25
-        if act == "Dance": return dur * 1
-        if act == "Trekking": return dur * 1.25
-        if act == "Volley Ball": return dur * 0.8
-        return dur
-    df["Points"] = df.apply(calculate_points, axis=1)
-
-    # Show full table
-    st.dataframe(df.sort_values(by="date", ascending=False), use_container_width=True)
-
-    # Leaderboard
-    st.subheader("🏅 Leaderboard (Top Performers)")
-    leaderboard = df.groupby("member_name")["Points"].sum().reset_index().sort_values("Points", ascending=False)
-    st.dataframe(leaderboard, use_container_width=True)
+        st.subheader("📜 My Activity Records")
+        logs = db.collection("activities").document(user_phone).collection("logs").order_by("date").stream()
+        st.table([{**l.to_dict()} for l in logs])
 else:
-    st.info("No activity records found yet.")
+    register_user()

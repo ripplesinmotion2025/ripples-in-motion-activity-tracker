@@ -1,7 +1,6 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Pyrebase (for Authentication)
 firebaseConfig = {
   "apiKey": "AIzaSyBKQZn1VHpID3D8jpjQdSd3usBg7pxeeRA",
   "authDomain": "ripples-in-motion-activi-8f311.firebaseapp.com",
@@ -16,11 +15,17 @@ firebaseConfig = {
 #firebase = pyrebase.initialize_app(firebaseConfig)
 #pb_auth = firebase.auth()
 
-# Admin SDK for Firestore
-cred = credentials.Certificate("serviceAccountKey.json")  # Download from Firebase Console > Service Accounts
+import os, json
+from firebase_admin import credentials, firestore, initialize_app
 
-# Initialize Firebase App (only once)
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+# Read Firebase credentials from environment variable
+firebase_key_json = os.getenv("FIREBASE_KEY")
+firebase_key = json.loads(firebase_key_json)
+
+cred = credentials.Certificate(firebase_key)
+initialize_app(cred)
+
+db = firestore.client()
+
 
 db = firestore.client()

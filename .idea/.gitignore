@@ -1,0 +1,15 @@
+# Streamlit and Python cache
+__pycache__/
+.env
+.venv
+*.pyc
+.DS_Store
+
+# Firebase secret key
+serviceAccountKey.json
+
+# Streamlit config and cache
+.streamlit/
+
+# VS Code files
+.vscode/

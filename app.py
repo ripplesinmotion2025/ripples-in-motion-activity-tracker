@@ -1,197 +1,160 @@
 import streamlit as st
-import datetime
-from firebase_config import db
+from datetime import datetime
+import pandas as pd
+import plotly.express as px
+from firebase_config import auth, db
 
-st.set_page_config(page_title="Ripples in Motion Activity Tracker", layout="centered")
+# ---------------- CONFIG ----------------
+st.set_page_config(page_title="Ripples in Motion 🌊", layout="wide")
 
-# --------------------------------
-# Helper: Calorie Calculation
-# --------------------------------
-def calculate_calories(activity, duration, weight=70):
-    """Estimate calories burned using MET values."""
-    MET_VALUES = {
-        "Walking": 3.5,
-        "Jogging": 7,
-        "Running": 9.8,
-        "Cycling": 7.5,
-        "Trekking": 6.5,
-        "Badminton": 5.5,
-        "Pickle Ball": 5,
-        "Volley Ball": 4,
-        "Gym": 6,
-        "Yoga": 3,
-        "Dance": 5,
-        "Swimming": 8,
-        "Skipping": 10,
-        "Workout": 6.5
-    }
-    met = MET_VALUES.get(activity, 4)
-    calories = round(met * weight * (duration / 60), 1)
-    return calories
-
-
-# --------------------------------
-# User Registration
-# --------------------------------
+# ---------------- Helper Functions ----------------
 def register_user():
-    st.subheader("🧍 Register or Login")
-    name = st.text_input("Full Name")
-    dob = st.date_input("Date of Birth")
-    phone = st.text_input("WhatsApp Number")
+    st.header("🏁 Register for Ripples in Motion")
+    full_name = st.text_input("Full Name")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-    if st.button("Register / Login"):
-        if name and phone:
-            user_ref = db.collection("users").document(phone)
-            user_doc = user_ref.get()
+    dob_year = st.selectbox("Year of Birth", options=list(range(1950, datetime.now().year + 1)))
+    phone = st.text_input("Phone / WhatsApp Number")
+    height = st.number_input("Height (cm)", min_value=0.0, format="%.1f")
+    weight = st.number_input("Weight (kg)", min_value=0.0, format="%.1f")
 
-            if user_doc.exists:
-                st.success(f"Welcome back, {user_doc.to_dict()['name']}! ✅")
-            else:
-                user_ref.set({
-                    "name": name,
-                    "dob": dob.strftime("%Y-%m-%d"),
-                    "phone": phone,
-                    "created_at": datetime.datetime.now()
-                })
-                st.success(f"🎉 {name} registered successfully!")
+    if st.button("Register"):
+        try:
+            user = auth.create_user_with_email_and_password(email, password)
+            uid = user["localId"]
 
-            st.session_state["user_phone"] = phone
-            st.rerun()
-        else:
-            st.warning("⚠️ Please fill in all details before proceeding.")
-
-
-# --------------------------------
-# Log Activity
-# --------------------------------
-def log_activity():
-    st.subheader("🏃‍♀️ Log Your Activity")
-    phone = st.session_state.get("user_phone")
-    if not phone:
-        st.warning("Please register or log in first.")
-        return
-
-    activities = [
-        "Running", "Walking", "Cycling", "Jogging", "Yoga", "Swimming",
-        "Skipping", "Workout", "Trekking", "Badminton", "Pickle Ball",
-        "Volley Ball", "Dance", "Gym"
-    ]
-
-    selected_activity = st.selectbox("Select Activity", activities)
-    duration = st.number_input("Duration (in minutes)", min_value=1)
-    date = st.date_input("Activity Date", datetime.date.today())
-
-    calories = calculate_calories(selected_activity, duration)
-    st.info(f"🔥 Estimated Calories Burned: **{calories} kcal**")
-
-    if st.button("Submit Activity"):
-        db.collection("activities").add({
-            "phone": phone,
-            "activity": selected_activity,
-            "duration": duration,
-            "calories": calories,
-            "date": date.strftime("%Y-%m-%d"),
-            "timestamp": datetime.datetime.now()
-        })
-        st.success(f"✅ {selected_activity} logged successfully for {date}!")
-        st.balloons()
-
-
-# --------------------------------
-# Leaderboard
-# --------------------------------
-def show_leaderboard():
-    st.subheader("🏆 Leaderboard (This Month)")
-
-    activities_ref = db.collection("activities")
-
-    start_month = datetime.date.today().replace(day=1)
-    end_month = datetime.date.today()
-
-    query = activities_ref.where("date", ">=", start_month.strftime("%Y-%m-%d")) \
-                          .where("date", "<=", end_month.strftime("%Y-%m-%d"))
-    results = query.stream()
-
-    data = {}
-    for doc in results:
-        entry = doc.to_dict()
-        phone = entry.get("phone")
-        calories = entry.get("calories", 0)
-
-        data[phone] = data.get(phone, 0) + calories
-
-    if not data:
-        st.info("No activities logged for this month yet.")
-        return
-
-    leaderboard = []
-    for phone, total_cal in data.items():
-        user_doc = db.collection("users").document(phone).get()
-        if user_doc.exists:
-            user_data = user_doc.to_dict()
-            leaderboard.append({
-                "name": user_data["name"],
+            db.collection("users").document(uid).set({
+                "full_name": full_name,
+                "email": email,
+                "dob_year": dob_year,
                 "phone": phone,
-                "total_calories": total_cal
+                "height": height,
+                "weight": weight,
+                "points": 0
             })
 
-    leaderboard = sorted(leaderboard, key=lambda x: x["total_calories"], reverse=True)
-
-    st.write("### 🥇 Top 3 Performers This Month")
-    for i, user in enumerate(leaderboard[:3]):
-        st.markdown(f"**{i+1}. {user['name']} — {round(user['total_calories'], 1)} kcal**")
-
-    st.divider()
-    st.write("### 📋 Full Leaderboard (By Calories Burned)")
-    st.dataframe(leaderboard)
+            st.success("🎉 Registered successfully! Please log in.")
+            st.session_state["show_login"] = True
+            st.rerun()
+        except Exception as e:
+            st.error(f"Registration failed: {e}")
 
 
-# --------------------------------
-# View Past Activities
-# --------------------------------
-def view_my_activities():
-    st.subheader("📅 My Past Activities")
-    phone = st.session_state.get("user_phone")
-    if not phone:
-        st.warning("Please register or log in first.")
+def login_user():
+    st.header("🔐 Login to Continue")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            st.session_state["user"] = user
+            st.success("Welcome back!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Login failed: {e}")
+
+
+def show_leaderboard():
+    st.title("🏆 Monthly Leaderboard")
+    current_month = datetime.now().strftime("%Y-%m")
+
+    users_ref = db.collection("users").stream()
+    data = []
+    for doc in users_ref:
+        user = doc.to_dict()
+        uid = doc.id
+        total_points = 0
+
+        activities_ref = db.collection("activities").document(uid).collection("logs").stream()
+        for act_doc in activities_ref:
+            act = act_doc.to_dict()
+            if act["date"].startswith(current_month):
+                total_points += act["points"]
+
+        data.append({"Name": user.get("full_name"), "Points": total_points})
+
+    df = pd.DataFrame(data).sort_values(by="Points", ascending=False)
+    df["Rank"] = range(1, len(df) + 1)
+    st.dataframe(df, use_container_width=True)
+
+    # Medal Display
+    if len(df) >= 3:
+        st.markdown(f"🥇 **{df.iloc[0]['Name']}** | 🥈 **{df.iloc[1]['Name']}** | 🥉 **{df.iloc[2]['Name']}**")
+
+
+def log_activity(uid):
+    st.title("📝 Log Your Daily Activity")
+
+    activity_type = st.selectbox("Select Activity", ["Running", "Walking", "Cycling", "Swimming", "Gym Workout"])
+    distance = st.number_input("Distance (in km)", min_value=0.0, format="%.2f")
+    duration = st.number_input("Duration (in minutes)", min_value=0)
+    date = st.date_input("Date", datetime.now())
+
+    if st.button("Save Activity"):
+        points = int(distance * 10)
+        db.collection("activities").document(uid).collection("logs").add({
+            "activity_type": activity_type,
+            "distance": distance,
+            "duration": duration,
+            "points": points,
+            "date": date.strftime("%Y-%m-%d")
+        })
+        st.success(f"✅ {activity_type} logged successfully! (+{points} points)")
+
+
+def view_history(uid):
+    st.title("📈 My Activity History")
+    activities = db.collection("activities").document(uid).collection("logs").stream()
+    data = [a.to_dict() for a in activities]
+    if not data:
+        st.info("No activities logged yet.")
         return
 
-    activities_ref = db.collection("activities").where("phone", "==", phone)
-    results = activities_ref.stream()
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
 
-    records = []
-    for doc in results:
-        record = doc.to_dict()
-        records.append({
-            "Date": record.get("date"),
-            "Activity": record.get("activity"),
-            "Duration (mins)": record.get("duration"),
-            "Calories (kcal)": record.get("calories")
-        })
+    st.line_chart(df.set_index("date")["points"])
 
-    if not records:
-        st.info("You haven’t logged any activities yet.")
+    fig = px.bar(df, x="date", y="points", color="activity_type", title="Points Over Time")
+    st.plotly_chart(fig, use_container_width=True)
+
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Download CSV", data=csv, file_name="my_activity_history.csv", mime="text/csv")
+
+
+def show_dashboard():
+    user = st.session_state["user"]
+    uid = user["localId"]
+    user_data = db.collection("users").document(uid).get().to_dict()
+
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/2764/2764434.png", width=100)
+        st.header(f"Welcome, {user_data.get('full_name', 'User')} 👋")
+        choice = st.radio("Navigate", ["🏆 Leaderboard", "📝 Log Activity", "📈 My History"])
+        if st.button("Logout"):
+            del st.session_state["user"]
+            st.success("Logged out successfully!")
+            st.rerun()
+
+    if choice == "🏆 Leaderboard":
+        show_leaderboard()
+    elif choice == "📝 Log Activity":
+        log_activity(uid)
     else:
-        records = sorted(records, key=lambda x: x["Date"], reverse=True)
-        st.dataframe(records)
-        total_time = sum([r["Duration (mins)"] for r in records])
-        total_calories = sum([r["Calories (kcal)"] for r in records])
-        st.success(f"⏱️ Total Time: **{total_time} mins**, 🔥 Total Calories: **{round(total_calories,1)} kcal**")
+        view_history(uid)
 
 
-# --------------------------------
-# Streamlit App Layout
-# --------------------------------
-st.title("🏃‍♂️ Ripples in Motion Activity Tracker")
+# ------------------------ Main App ------------------------
+st.title("🌊 Ripples in Motion - Activity Tracker")
 
-menu = ["Register / Login", "Log Activity", "Leaderboard", "My Past Activities"]
-choice = st.sidebar.selectbox("Navigation", menu)
-
-if choice == "Register / Login":
-    register_user()
-elif choice == "Log Activity":
-    log_activity()
-elif choice == "Leaderboard":
-    show_leaderboard()
-elif choice == "My Past Activities":
-    view_my_activities()
+if "user" in st.session_state:
+    show_dashboard()
+else:
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    with tab1:
+        login_user()
+    with tab2:
+        register_user()

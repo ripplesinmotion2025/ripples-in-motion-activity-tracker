@@ -27,7 +27,5 @@ firebase = initialize_app(cred, {
     "storageBucket": "ripples-in-motion-activi-8f311.appspot.com"
 })
 
-auth = firebase.auth()
-
 db = firestore.client()
 bucket = storage.bucket()

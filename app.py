@@ -25,7 +25,7 @@ def register_user():
         user_ref.set(data)
         st.session_state.user = phone
         st.success(f"Welcome, {name}!")
-        st.experimental_rerun()
+        st.rerun()
 
 # --- ACTIVITY LOGGING ---
 def log_activity(phone):

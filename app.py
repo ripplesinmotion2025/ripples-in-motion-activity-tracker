@@ -161,7 +161,31 @@ def show_dashboard(uid, full_name):
 st.title("🌊 Ripples in Motion - Activity Tracker")
 
 if "user_name" not in st.session_state:
-    full_name = st.text_input("Enter Your Name to Continue")
+    full_name = st.selectbox("Enter Your Name to Continue", ["Prem Kumar R",
+        "Aswin",
+        "Selvi SenthilKumar",
+        "Kamalesh",
+        "Rashmi",
+        "Anu Anu",
+        "Gowtham",
+        "Harine",
+        "Shakthi",
+        "Sindhu",
+        "Ram Prasad",
+        "Selvarani",
+        "Sowmya",
+        "Deepana",
+        "Remya",
+        "Gokul",
+        "Mahima",
+        "Umarani",
+        "Selvi",
+        "Mani",
+        "Selvam",
+        "Srimathi",
+        "Navin",
+        "Durai",
+        "Nithya"])
     if st.button("Continue"):
         if full_name.strip():
             uid = get_or_create_user(full_name.strip())

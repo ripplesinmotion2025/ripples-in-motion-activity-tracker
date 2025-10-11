@@ -2,60 +2,33 @@ import streamlit as st
 from datetime import datetime
 import pandas as pd
 import plotly.express as px
-from firebase_admin import auth
-
-from firebase_config import  db
+from firebase_config import db
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Ripples in Motion 🌊", layout="wide")
 
 # ---------------- Helper Functions ----------------
-def register_user():
-    st.header("🏁 Register for Ripples in Motion")
-    full_name = st.text_input("Full Name")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+def get_or_create_user(full_name):
+    users_ref = db.collection("users")
+    query = users_ref.where("full_name", "==", full_name).stream()
+    user_doc = None
 
-    dob_year = st.selectbox("Year of Birth", options=list(range(1950, datetime.now().year + 1)))
-    phone = st.text_input("Phone / WhatsApp Number")
-    height = st.number_input("Height (cm)", min_value=0.0, format="%.1f")
-    weight = st.number_input("Weight (kg)", min_value=0.0, format="%.1f")
+    for doc in query:
+        user_doc = doc
+        break
 
-    if st.button("Register"):
-        try:
-            user = auth.create_user_with_email_and_password(email, password)
-            uid = user["localId"]
-
-            db.collection("users").document(uid).set({
-                "full_name": full_name,
-                "email": email,
-                "dob_year": dob_year,
-                "phone": phone,
-                "height": height,
-                "weight": weight,
-                "points": 0
-            })
-
-            st.success("🎉 Registered successfully! Please log in.")
-            st.session_state["show_login"] = True
-            st.rerun()
-        except Exception as e:
-            st.error(f"Registration failed: {e}")
-
-
-def login_user():
-    st.header("🔐 Login to Continue")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        try:
-            user = auth.sign_in_with_email_and_password(email, password)
-            st.session_state["user"] = user
-            st.success("Welcome back!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Login failed: {e}")
+    if not user_doc:
+        new_user_ref = users_ref.document()
+        new_user_ref.set({
+            "full_name": full_name,
+            "height": 0,
+            "weight": 0,
+            "points": 0,
+            "created_at": datetime.now().isoformat()
+        })
+        return new_user_ref.id
+    else:
+        return user_doc.id
 
 
 def show_leaderboard():
@@ -77,6 +50,10 @@ def show_leaderboard():
 
         data.append({"Name": user.get("full_name"), "Points": total_points})
 
+    if not data:
+        st.info("No users found yet.")
+        return
+
     df = pd.DataFrame(data).sort_values(by="Points", ascending=False)
     df["Rank"] = range(1, len(df) + 1)
     st.dataframe(df, use_container_width=True)
@@ -85,8 +62,8 @@ def show_leaderboard():
         st.markdown(f"🥇 **{df.iloc[0]['Name']}** | 🥈 **{df.iloc[1]['Name']}** | 🥉 **{df.iloc[2]['Name']}**")
 
 
-def log_activity(uid):
-    st.title("📝 Log Your Daily Activity")
+def log_activity(uid, full_name):
+    st.title(f"📝 Log Activity for {full_name}")
 
     activity_type = st.selectbox("Select Activity", ["Running", "Walking", "Cycling", "Swimming", "Gym Workout"])
     distance = st.number_input("Distance (in km)", min_value=0.0, format="%.2f")
@@ -127,44 +104,34 @@ def view_history(uid):
 
 
 def edit_profile(uid):
-    st.title("🧑‍💻 Edit My Profile")
+    st.title("🧑‍💻 Update My Details")
 
     user_ref = db.collection("users").document(uid)
     user_data = user_ref.get().to_dict()
 
     with st.form("edit_profile_form"):
-        phone = st.text_input("Phone / WhatsApp Number", user_data.get("phone", ""))
         height = st.number_input("Height (cm)", min_value=0.0, value=float(user_data.get("height", 0.0)), format="%.1f")
         weight = st.number_input("Weight (kg)", min_value=0.0, value=float(user_data.get("weight", 0.0)), format="%.1f")
         submitted = st.form_submit_button("Update Profile")
 
         if submitted:
-            user_ref.update({
-                "phone": phone,
-                "height": height,
-                "weight": weight
-            })
+            user_ref.update({"height": height, "weight": weight})
             st.success("✅ Profile updated successfully!")
 
 
-def show_dashboard():
-    user = st.session_state["user"]
-    uid = user["localId"]
-    user_data = db.collection("users").document(uid).get().to_dict()
-
+def show_dashboard(uid, full_name):
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2764/2764434.png", width=100)
-        st.header(f"Welcome, {user_data.get('full_name', 'User')} 👋")
+        st.header(f"Welcome, {full_name} 👋")
         choice = st.radio("Navigate", ["🏆 Leaderboard", "📝 Log Activity", "📈 My History", "🧑‍💻 Edit Profile"])
-        if st.button("Logout"):
-            del st.session_state["user"]
-            st.success("Logged out successfully!")
+        if st.button("Change User"):
+            del st.session_state["user_name"]
             st.rerun()
 
     if choice == "🏆 Leaderboard":
         show_leaderboard()
     elif choice == "📝 Log Activity":
-        log_activity(uid)
+        log_activity(uid, full_name)
     elif choice == "📈 My History":
         view_history(uid)
     else:
@@ -174,11 +141,16 @@ def show_dashboard():
 # ------------------------ Main App ------------------------
 st.title("🌊 Ripples in Motion - Activity Tracker")
 
-if "user" in st.session_state:
-    show_dashboard()
+if "user_name" not in st.session_state:
+    full_name = st.text_input("Enter Your Name to Continue")
+    if st.button("Continue"):
+        if full_name.strip():
+            uid = get_or_create_user(full_name.strip())
+            st.session_state["user_name"] = full_name.strip()
+            st.session_state["uid"] = uid
+            st.success(f"Welcome, {full_name}! Let's begin 🌊")
+            st.rerun()
+        else:
+            st.warning("Please enter a valid name to continue.")
 else:
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    with tab1:
-        login_user()
-    with tab2:
-        register_user()
+    show_dashboard(st.session_state["uid"], st.session_state["user_name"])

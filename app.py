@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 from firebase_config import db
+from utils.activity_utils import calculate_points, calculate_calories
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Ripples in Motion 🌊", layout="wide")
@@ -65,18 +66,36 @@ def show_leaderboard():
 def log_activity(uid, full_name):
     st.title(f"📝 Log Activity for {full_name}")
 
-    activity_type = st.selectbox("Select Activity", ["Running", "Walking", "Cycling", "Swimming", "Gym Workout"])
+    activity_type = st.selectbox("Select Activity", ["Walking",
+        "Jogging",
+        "Running",
+        "Cycling",
+        "Trekking",
+        "Badminton",
+        "Pickle Ball",
+        "Volley Ball",
+        "Gym",
+        "Yoga/Meditation",
+        "Dance",
+        "Swimming",
+        "Table Tennis",
+        "Tennis",
+        "Cricket",
+        "Foot ball"])
+
     distance = st.number_input("Distance (in km)", min_value=0.0, format="%.2f")
     duration = st.number_input("Duration (in minutes)", min_value=0)
     date = st.date_input("Date", datetime.now())
 
     if st.button("Save Activity"):
-        points = int(distance * 10)
+        points = int(calculate_points(activity_type, distance, duration))
+        calories = int(calculate_calories(activity_type,duration))
         db.collection("activities").document(uid).collection("logs").add({
             "activity_type": activity_type,
             "distance": distance,
             "duration": duration,
             "points": points,
+            "calories": calories,
             "date": date.strftime("%Y-%m-%d")
         })
         st.success(f"✅ {activity_type} logged successfully! (+{points} points)")

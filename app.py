@@ -157,7 +157,12 @@ if full_name and st.button("Continue"):
     uid = get_or_create_user(full_name.strip())
     st.session_state["user_name"] = full_name.strip()
     st.session_state["uid"] = uid
-    st.experimental_rerun()
+    st.rerun()
+
+activities = [
+        "Walking","Jogging","Running","Cycling","Trekking","Badminton","Pickle Ball","Volley Ball",
+        "Gym","Yoga/Meditation","Dance","Swimming","Table Tennis","Tennis","Cricket","Football"
+    ]
 
 if "user_name" not in st.session_state:
     st.info("Select or type your name and click Continue to proceed.")
@@ -196,10 +201,7 @@ if menu == "Leaderboard":
 # ---------- Log Activity ----------
 elif menu == "Log Activity":
     st.header(f"📝 Log Activity — {full_name}")
-    activities = [
-        "Walking","Jogging","Running","Cycling","Trekking","Badminton","Pickle Ball","Volley Ball",
-        "Gym","Yoga/Meditation","Dance","Swimming","Table Tennis","Tennis","Cricket","Football"
-    ]
+
     with st.form("log_form"):
         act = st.selectbox("Activity", activities)
         dist = st.number_input("Distance (km)", min_value=0.0, step=0.1, format="%.2f")
@@ -237,11 +239,11 @@ elif menu == "Edit / Delete Activities":
                 if col3.button("Update", key=f"upd_{rec['_id']}"):
                     save_activity(uid, new_act, new_dist, new_dur, new_date.strftime("%Y-%m-%d"), doc_id=rec["_id"])
                     st.success("Updated successfully.")
-                    st.experimental_rerun()
+                    st.rerun()
                 if col4.button("Delete", key=f"del_{rec['_id']}"):
                     delete_activity(uid, rec["_id"])
                     st.warning("Deleted.")
-                    st.experimental_rerun()
+                    st.rerun()
 
 # ---------- My History (charts & heatmaps) ----------
 elif menu == "My History":
@@ -324,4 +326,4 @@ elif menu == "Profile":
             "weight": float(weight)
         })
         st.success("Profile updated.")
-        st.experimental_rerun()
+        st.rerun()
